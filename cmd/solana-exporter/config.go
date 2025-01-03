@@ -4,9 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"time"
+
 	"github.com/asymmetric-research/solana-exporter/pkg/rpc"
 	"github.com/asymmetric-research/solana-exporter/pkg/slog"
-	"time"
 )
 
 type (
@@ -23,6 +24,7 @@ type (
 		MonitorBlockSizes         bool
 		LightMode                 bool
 		SlotPace                  time.Duration
+		SolanaCluster             string
 	}
 )
 
@@ -97,6 +99,7 @@ func NewExporterConfig(
 		MonitorBlockSizes:         monitorBlockSizes,
 		LightMode:                 lightMode,
 		SlotPace:                  slotPace,
+		SolanaCluster:             "mainnet-beta",
 	}
 	return &config, nil
 }
@@ -112,6 +115,7 @@ func NewExporterConfigFromCLI(ctx context.Context) (*ExporterConfig, error) {
 		monitorBlockSizes         bool
 		lightMode                 bool
 		slotPace                  int
+		solanaCluster             string
 	)
 	flag.IntVar(
 		&httpTimeout,
@@ -171,6 +175,12 @@ func NewExporterConfigFromCLI(ctx context.Context) (*ExporterConfig, error) {
 		1,
 		"This is the time between slot-watching metric collections, defaults to 1s.",
 	)
+	flag.StringVar(
+		&solanaCluster,
+		"solana-cluster",
+		"mainnet-beta",
+		"Solana cluster to query (mainnet-beta, testnet, devnet)",
+	)
 	flag.Parse()
 
 	config, err := NewExporterConfig(
@@ -188,5 +198,6 @@ func NewExporterConfigFromCLI(ctx context.Context) (*ExporterConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	config.SolanaCluster = solanaCluster
 	return config, nil
 }

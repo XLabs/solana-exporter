@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/asymmetric-research/solana-exporter/pkg/rpc"
 	"github.com/asymmetric-research/solana-exporter/pkg/slog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -111,6 +112,7 @@ func (c *SolanaCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.NodeNumSlotsBehind.Desc
 	ch <- c.NodeMinimumLedgerSlot.Desc
 	ch <- c.NodeFirstAvailableBlock.Desc
+	ch <- descSolanaMinRequiredVersion
 }
 
 func (c *SolanaCollector) collectVoteAccounts(ctx context.Context, ch chan<- prometheus.Metric) {
@@ -255,6 +257,20 @@ func (c *SolanaCollector) Collect(ch chan<- prometheus.Metric) {
 	c.collectVoteAccounts(ctx, ch)
 	c.collectVersion(ctx, ch)
 	c.collectBalances(ctx, ch)
+
+	// Add min required version metric
+	minVersion, err := c.rpcClient.GetMinRequiredVersion(context.Background(), c.config.SolanaCluster)
+	if err != nil {
+		c.logger.Errorf("failed to get min required version: %v", err)
+	} else {
+		ch <- prometheus.MustNewConstMetric(
+			descSolanaMinRequiredVersion,
+			prometheus.GaugeValue,
+			1,
+			minVersion,
+			c.config.SolanaCluster,
+		)
+	}
 
 	c.logger.Info("=========== END COLLECTION ===========")
 }

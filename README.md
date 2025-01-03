@@ -47,6 +47,7 @@ The exporter is configured via the following command line arguments:
 | `-nodekey`                     | Solana nodekey (identity account) representing a validator to monitor - can set multiple times.                                                                                                                         | N/A                       |
 | `-rpc-url`                     | Solana RPC URL (including protocol and path), e.g., `"http://localhost:8899"` or `"https://api.mainnet-beta.solana.com"`                                                                                                | `"http://localhost:8899"` |
 | `-slot-pace`                   | This is the time (in seconds) between slot-watching metric collections                                                                                                                                                  | `1`                       |
+| `-solana-cluster`              | Solana cluster to query for minimum required version (mainnet-beta, testnet, devnet). Only used for the `solana_min_required_version` metric.                                                                           | `mainnet-beta`            |
 
 ### Notes on Configuration
 
@@ -87,6 +88,7 @@ The table below describes all the metrics collected by the `solana-exporter`:
 | `solana_validator_fee_rewards`                 | Transaction fee rewards earned.                                                          | `nodekey`, `epoch`            |
 | `solana_validator_block_size`                  | Number of transactions per block.                                                        | `nodekey`, `transaction_type` |
 | `solana_node_block_height`                     | The current block height of the node.*                                                   | N/A                           |
+| `solana_min_required_version`                  | Minimum required Solana version for foundation delegation program                        | `version`, `cluster`          |
 
 ***NOTE***: An `*` in the description indicates that the metric **is** tracked in `-light-mode`.
 
@@ -100,6 +102,7 @@ The table below describes the various metric labels:
 | `votekey`           | Validator vote account address.     | e.g., `CertusDeBmqN8ZawdkxK5kFGMwBXdudvWHYwtNgNhvLu` |
 | `address`          | Solana account address.             | e.g., `Certusm1sa411sMpV9FPqU5dXAYhmmhygvxJ23S6hJ24` |
 | `version`          | Solana node version.                | e.g., `v1.18.23`                                     |
+| `cluster`          | Solana cluster name.                | `mainnet-beta`, `testnet`, `devnet`                  |
 | `status`           | Whether a slot was skipped or valid | `valid`, `skipped`                                   |
 | `epoch`            | Solana epoch number.                | e.g., `663`                                          |
 | `transaction_type` | General transaction type.           | `vote`, `non_vote`                                   |

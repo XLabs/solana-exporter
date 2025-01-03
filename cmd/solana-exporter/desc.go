@@ -1,6 +1,9 @@
 package main
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/asymmetric-research/solana-exporter/pkg/slog"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -33,3 +36,30 @@ func (c *GaugeDesc) MustNewConstMetric(value float64, labels ...string) promethe
 func (c *GaugeDesc) NewInvalidMetric(err error) prometheus.Metric {
 	return prometheus.NewInvalidMetric(c.Desc, err)
 }
+
+func parseVersionToNumber(version string) float64 {
+	// Remove "v" prefix if present
+	version = strings.TrimPrefix(version, "v")
+
+	// Split version into parts
+	parts := strings.Split(version, ".")
+
+	// Convert to number
+	if len(parts) >= 3 {
+		major, _ := strconv.ParseFloat(parts[0], 64)
+		minor, _ := strconv.ParseFloat(parts[1], 64)
+		patch, _ := strconv.ParseFloat(parts[2], 64)
+
+		return major*1e4 + minor*1e2 + patch
+	}
+	return 0
+}
+
+var (
+	descSolanaMinRequiredVersion = prometheus.NewDesc(
+		"solana_min_required_version",
+		"Minimum required Solana version for foundation delegation program",
+		[]string{"version", "cluster"},
+		nil,
+	)
+)

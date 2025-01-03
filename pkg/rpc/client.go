@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/asymmetric-research/solana-exporter/pkg/slog"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"slices"
 	"time"
+
+	"github.com/asymmetric-research/solana-exporter/pkg/slog"
+	"go.uber.org/zap"
 )
 
 type (
@@ -258,4 +259,26 @@ func (c *Client) GetFirstAvailableBlock(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return resp.Result, nil
+}
+
+func (c *Client) GetMinRequiredVersion(ctx context.Context, cluster string) (string, error) {
+	url := fmt.Sprintf("https://api.solana.org/api/validators/epoch-stats?cluster=%s&epoch=latest", cluster)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.HttpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch min required version: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var stats ValidatorEpochStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return stats.Stats.Config.MinVersion, nil
 }
