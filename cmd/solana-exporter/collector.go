@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/asymmetric-research/solana-exporter/pkg/api"
 	"github.com/asymmetric-research/solana-exporter/pkg/rpc"
 	"github.com/asymmetric-research/solana-exporter/pkg/slog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -22,6 +23,7 @@ const (
 	EpochLabel           = "epoch"
 	TransactionTypeLabel = "transaction_type"
 	IsFiredancerLabel    = "is_firedancer"
+	ClusterLabel         = "cluster"
 
 	StatusSkipped = "skipped"
 	StatusValid   = "valid"
@@ -35,32 +37,35 @@ const (
 
 type SolanaCollector struct {
 	rpcClient *rpc.Client
+	apiClient *api.Client
 	logger    *zap.SugaredLogger
 
 	config *ExporterConfig
 
 	/// descriptors:
-	ValidatorActiveStake    *GaugeDesc
-	ClusterActiveStake      *GaugeDesc
-	ValidatorLastVote       *GaugeDesc
-	ClusterLastVote         *GaugeDesc
-	ValidatorRootSlot       *GaugeDesc
-	ClusterRootSlot         *GaugeDesc
-	ValidatorDelinquent     *GaugeDesc
-	ClusterValidatorCount   *GaugeDesc
-	AccountBalances         *GaugeDesc
-	NodeVersion             *GaugeDesc
-	NodeIsHealthy           *GaugeDesc
-	NodeNumSlotsBehind      *GaugeDesc
-	NodeMinimumLedgerSlot   *GaugeDesc
-	NodeFirstAvailableBlock *GaugeDesc
-	NodeIdentity            *GaugeDesc
-	NodeIsActive            *GaugeDesc
+	ValidatorActiveStake         *GaugeDesc
+	ClusterActiveStake           *GaugeDesc
+	ValidatorLastVote            *GaugeDesc
+	ClusterLastVote              *GaugeDesc
+	ValidatorRootSlot            *GaugeDesc
+	ClusterRootSlot              *GaugeDesc
+	ValidatorDelinquent          *GaugeDesc
+	ClusterValidatorCount        *GaugeDesc
+	AccountBalances              *GaugeDesc
+	NodeVersion                  *GaugeDesc
+	NodeIsHealthy                *GaugeDesc
+	NodeNumSlotsBehind           *GaugeDesc
+	NodeMinimumLedgerSlot        *GaugeDesc
+	NodeFirstAvailableBlock      *GaugeDesc
+	NodeIdentity                 *GaugeDesc
+	NodeIsActive                 *GaugeDesc
+	FoundationMinRequiredVersion *GaugeDesc
 }
 
-func NewSolanaCollector(rpcClient *rpc.Client, config *ExporterConfig) *SolanaCollector {
+func NewSolanaCollector(rpcClient *rpc.Client, apiClient *api.Client, config *ExporterConfig) *SolanaCollector {
 	collector := &SolanaCollector{
 		rpcClient: rpcClient,
+		apiClient: apiClient,
 		logger:    slog.Get(),
 		config:    config,
 		ValidatorActiveStake: NewGaugeDesc(
@@ -139,6 +144,11 @@ func NewSolanaCollector(rpcClient *rpc.Client, config *ExporterConfig) *SolanaCo
 			fmt.Sprintf("Whether the node is active and participating in consensus (using %s pubkey)", IdentityLabel),
 			IdentityLabel,
 		),
+		FoundationMinRequiredVersion: NewGaugeDesc(
+			"solana_foundation_min_required_version",
+			"Minimum required Solana version for the solana foundation delegation program",
+			"agave_min_version", "firedancer_min_version", ClusterLabel, EpochLabel,
+		),
 	}
 	return collector
 }
@@ -160,6 +170,7 @@ func (c *SolanaCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.NodeMinimumLedgerSlot.Desc
 	ch <- c.NodeFirstAvailableBlock.Desc
 	ch <- c.NodeIsActive.Desc
+	ch <- c.FoundationMinRequiredVersion.Desc
 }
 
 func (c *SolanaCollector) collectVoteAccounts(ctx context.Context, ch chan<- prometheus.Metric) {
@@ -351,6 +362,33 @@ func (c *SolanaCollector) Collect(ch chan<- prometheus.Metric) {
 	c.collectVersion(ctx, ch)
 	c.collectIdentity(ctx, ch)
 	c.collectBalances(ctx, ch)
-
+	c.collectFoundationMinRequiredVersion(ctx, ch)
 	c.logger.Info("=========== END COLLECTION ===========")
+}
+
+func (c *SolanaCollector) collectFoundationMinRequiredVersion(ctx context.Context, ch chan<- prometheus.Metric) {
+	c.logger.Info("Collecting minimum required version...")
+
+	genesisHash, err := c.rpcClient.GetGenesisHash(ctx)
+	if err != nil {
+		c.logger.Errorf("failed to get genesis hash: %v", err)
+		ch <- c.FoundationMinRequiredVersion.NewInvalidMetric(err)
+		return
+	}
+	cluster, err := rpc.GetClusterFromGenesisHash(genesisHash)
+	if err != nil {
+		c.logger.Errorf("failed to determine cluster: %v", err)
+		ch <- c.FoundationMinRequiredVersion.NewInvalidMetric(err)
+		return
+	}
+
+	agaveMinVersion, cluster, epoch, firedancerMinVersion, err := c.apiClient.GetMinRequiredVersion(ctx, cluster)
+	if err != nil {
+		c.logger.Errorf("failed to get min required version: %v", err)
+		ch <- c.FoundationMinRequiredVersion.NewInvalidMetric(err)
+	} else {
+		ch <- c.FoundationMinRequiredVersion.MustNewConstMetric(1, agaveMinVersion, firedancerMinVersion, cluster, fmt.Sprintf("%d", epoch))
+	}
+
+	c.logger.Info("Minimum required version collected.")
 }
