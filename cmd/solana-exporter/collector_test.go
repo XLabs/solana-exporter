@@ -263,7 +263,7 @@ func TestSolanaCollector(t *testing.T) {
 			NewLV(0, StateDelinquent),
 		),
 		collector.NodeVersion.makeCollectionTest(
-			NewLV(1, "v1.0.0"),
+			NewLV(1, "0", "v1.0.0"),
 		),
 		collector.NodeIdentity.makeCollectionTest(
 			NewLV(1, "testIdentity"),
