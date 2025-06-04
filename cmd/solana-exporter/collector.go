@@ -155,7 +155,7 @@ func NewSolanaCollector(rpcClient *rpc.Client, apiClient *api.Client, config *Ex
 			"agave_min_version", "firedancer_min_version", ClusterLabel, EpochLabel,
 		),
 		NodeIsOutdated: NewGaugeDesc(
-			"solana_node_outdated",
+			"solana_node_is_outdated",
 			"Whether the node is running a version below the required minimum for Firedancer",
 			IsFiredancerLabel, VersionLabel, "required_version", ClusterLabel,
 		),

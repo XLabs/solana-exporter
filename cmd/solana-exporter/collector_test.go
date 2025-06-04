@@ -373,9 +373,9 @@ func TestSolanaCollector_NodeIsOutdated(t *testing.T) {
 			agaveVer:      "1.0.0",
 			firedancerVer: "1.0.0",
 			expectedOutput: `
-# HELP solana_node_outdated Whether the node is running a version below the required minimum for Firedancer
-# TYPE solana_node_outdated gauge
-solana_node_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="1.0.0",version="0.9.0"} 1
+# HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
+# TYPE solana_node_is_outdated gauge
+solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="1.0.0",version="0.9.0"} 1
 `,
 		},
 		{
@@ -385,9 +385,9 @@ solana_node_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="
 			agaveVer:      "1.0.0",
 			firedancerVer: "1.0.0",
 			expectedOutput: `
-# HELP solana_node_outdated Whether the node is running a version below the required minimum for Firedancer
-# TYPE solana_node_outdated gauge
-solana_node_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="1.0.0",version="1.2.0"} 0
+# HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
+# TYPE solana_node_is_outdated gauge
+solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="1.0.0",version="1.2.0"} 0
 `,
 		},
 		{
@@ -397,9 +397,9 @@ solana_node_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="
 			agaveVer:      "1.0.0",
 			firedancerVer: "1.0.0",
 			expectedOutput: `
-# HELP solana_node_outdated Whether the node is running a version below the required minimum for Firedancer
-# TYPE solana_node_outdated gauge
-solana_node_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="0.9.0"} 1
+# HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
+# TYPE solana_node_is_outdated gauge
+solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="0.9.0"} 1
 `,
 		},
 		{
@@ -409,9 +409,9 @@ solana_node_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="
 			agaveVer:      "1.0.0",
 			firedancerVer: "1.0.0",
 			expectedOutput: `
-# HELP solana_node_outdated Whether the node is running a version below the required minimum for Firedancer
-# TYPE solana_node_outdated gauge
-solana_node_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="1.2.0"} 0
+# HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
+# TYPE solana_node_is_outdated gauge
+solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="1.2.0"} 0
 `,
 		},
 		{
@@ -421,9 +421,9 @@ solana_node_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="
 			agaveVer:      "1.0.0",
 			firedancerVer: "2.0.0",
 			expectedOutput: `
-# HELP solana_node_outdated Whether the node is running a version below the required minimum for Firedancer
-# TYPE solana_node_outdated gauge
-solana_node_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="1.1.0"} 0
+# HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
+# TYPE solana_node_is_outdated gauge
+solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="1.1.0"} 0
 `,
 		},
 	}
@@ -456,7 +456,7 @@ solana_node_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="
 			collector := NewSolanaCollector(client, mock.Client, &ExporterConfig{})
 			collector.isFiredancer = tt.isFiredancer
 
-			if err := testutil.CollectAndCompare(collector, strings.NewReader(tt.expectedOutput), "solana_node_outdated"); err != nil {
+			if err := testutil.CollectAndCompare(collector, strings.NewReader(tt.expectedOutput), "solana_node_is_outdated"); err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
