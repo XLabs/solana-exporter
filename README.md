@@ -147,7 +147,8 @@ The tables below describes all the metrics collected by the `solana-exporter`:
 | `solana_validator_block_size`                  | Number of transactions per block.                                                                                     | `nodekey`, `transaction_type` |
 | `solana_node_block_height`                     | The current block height of the node.                                                                                 | N/A                           |
 | `solana_node_is_active`                        | Whether the node is active and participating in consensus.                                                            | `identity`                    |
-| `solana_foundation_min_required_version` | Minimum required Solana version for the [solana foundation delegation program](https://solana.org/delegation-program) | `version`, `cluster`
+| `solana_node_is_outdated`                      | Whether the node is running a version below the required minimum for Firedancer and Agave clients.                                      | `is_firedancer`, `version`, `required_version`, `cluster` |
+| `solana_foundation_min_required_version` | Minimum required Solana version for the [solana foundation delegation program](https://solana.org/delegation-program) | `agave_min_version`, `firedancer_min_version`, `cluster`, `epoch` |
 
 #### Vote Account Metrics
 
@@ -176,3 +177,5 @@ The table below describes the various metric labels:
 | `epoch`            | Solana epoch number.                          | e.g., `663`                                          |
 | `transaction_type` | General transaction type.                     | `vote`, `non_vote`                                   |
 | `cluster`          | Solana cluster.                                | `mainnet-beta`, `devnet`, `testnet`                 |
+| `is_firedancer`    | Whether the node is running Firedancer.        | `0`, `1`                                            |
+| `required_version` | Minimum required version for the node type.    | e.g., `1.0.0`                                       |
