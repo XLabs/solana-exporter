@@ -21,9 +21,9 @@ func NewMockClient() *MockClient {
 	}
 }
 
-func (m *MockClient) SetMinRequiredVersion(version string) {
-	m.cache.agaveVersion = version
-	m.cache.firedancerVersion = "1.0.0"
+func (m *MockClient) SetMinRequiredVersion(agaveVersion, firedancerVersion string) {
+	m.cache.agaveVersion = agaveVersion
+	m.cache.firedancerVersion = firedancerVersion
 	m.cache.lastCheck = time.Now()
 }
 

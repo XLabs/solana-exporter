@@ -401,18 +401,28 @@ func (c *SolanaCollector) collectNodeIsOutdated(ch chan<- prometheus.Metric) {
 		}
 	}
 
-	_, _, _, requiredVersion, err := c.apiClient.GetMinRequiredVersion(context.Background(), cluster)
+	agaveMinVersion, _, _, firedancerMinVersion, err := c.apiClient.GetMinRequiredVersion(context.Background(), cluster)
 	if err != nil {
 		c.logger.Errorw("failed to get required version", "error", err)
 		return
 	}
 
+	// Choose the appropriate minimum version based on whether the node is running Firedancer
+	requiredVersion := agaveMinVersion
+	if c.isFiredancer {
+		requiredVersion = firedancerMinVersion
+	}
+
+	// Compare versions and determine if the node is outdated
 	isOutdated := compareVersions(version, requiredVersion) < 0
 	c.logger.Infow("node version check",
 		"current_version", version,
 		"required_version", requiredVersion,
 		"is_outdated", isOutdated,
 		"cluster", cluster,
+		"is_firedancer", c.isFiredancer,
+		"agave_min_version", agaveMinVersion,
+		"firedancer_min_version", firedancerMinVersion,
 	)
 
 	isFiredancerStr := "0"
