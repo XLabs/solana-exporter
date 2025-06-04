@@ -16,10 +16,10 @@ import (
 
 type (
 	Client struct {
-		HttpClient  http.Client
-		RpcUrl      string
-		HttpTimeout time.Duration
-		logger      *zap.SugaredLogger
+		HttpClient            http.Client
+		RpcUrl                string
+		HttpTimeout           time.Duration
+		logger                *zap.SugaredLogger
 		FiredancerMetricsPort int
 	}
 
@@ -67,11 +67,11 @@ func GetClusterFromGenesisHash(hash string) (string, error) {
 
 func NewRPCClient(rpcAddr string, httpTimeout time.Duration, firedancerMetricsPort int) *Client {
 	return &Client{
-		HttpClient:           http.Client{},
-		RpcUrl:              rpcAddr,
-		HttpTimeout:         httpTimeout,
+		HttpClient:            http.Client{},
+		RpcUrl:                rpcAddr,
+		HttpTimeout:           httpTimeout,
 		FiredancerMetricsPort: firedancerMetricsPort,
-		logger:              slog.Get(),
+		logger:                slog.Get(),
 	}
 }
 

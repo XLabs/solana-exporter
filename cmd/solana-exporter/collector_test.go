@@ -432,11 +432,11 @@ solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="0",required_versio
 		t.Run(tt.name, func(t *testing.T) {
 			_, client := rpc.NewMockClient(t,
 				map[string]any{
-					"getVersion":            map[string]string{"solana-core": tt.version},
-					"getGenesisHash":        rpc.MainnetGenesisHash,
-					"getHealth":             "ok",
-					"getIdentity":           map[string]string{"identity": "testIdentity"},
-					"minimumLedgerSlot":     0,
+					"getVersion":             map[string]string{"solana-core": tt.version},
+					"getGenesisHash":         rpc.MainnetGenesisHash,
+					"getHealth":              "ok",
+					"getIdentity":            map[string]string{"identity": "testIdentity"},
+					"minimumLedgerSlot":      0,
 					"getFirstAvailableBlock": 0,
 					"getVoteAccounts": map[string]any{
 						"current":    []any{},
