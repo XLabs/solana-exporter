@@ -356,3 +356,81 @@ func TestSolanaCollector_collectHealth(t *testing.T) {
 		}
 	})
 }
+
+func TestSolanaCollector_NodeIsOutdated(t *testing.T) {
+	tests := []struct {
+		name           string
+		isFiredancer   bool
+		version        string
+		requiredVer    string
+		expectedOutput string
+	}{
+		{
+			name:         "firedancer outdated",
+			isFiredancer: true,
+			version:      "0.9.0",
+			requiredVer:  "1.0.0",
+			expectedOutput: `
+# HELP solana_node_outdated Whether the node is running a version below the required minimum for Firedancer
+# TYPE solana_node_outdated gauge
+solana_node_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="1.0.0",version="0.9.0"} 1
+`,
+		},
+		{
+			name:         "firedancer up-to-date",
+			isFiredancer: true,
+			version:      "1.2.0",
+			requiredVer:  "1.0.0",
+			expectedOutput: `
+# HELP solana_node_outdated Whether the node is running a version below the required minimum for Firedancer
+# TYPE solana_node_outdated gauge
+solana_node_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="1.0.0",version="1.2.0"} 0
+`,
+		},
+		{
+			name:         "not firedancer",
+			isFiredancer: false,
+			version:      "1.2.0",
+			requiredVer:  "1.0.0",
+			expectedOutput: `
+# HELP solana_node_outdated Whether the node is running a version below the required minimum for Firedancer
+# TYPE solana_node_outdated gauge
+solana_node_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="1.2.0"} 0
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, client := rpc.NewMockClient(t,
+				map[string]any{
+					"getVersion":            map[string]string{"solana-core": tt.version},
+					"getGenesisHash":        rpc.MainnetGenesisHash,
+					"getHealth":             "ok",
+					"getIdentity":           map[string]string{"identity": "testIdentity"},
+					"minimumLedgerSlot":     0,
+					"getFirstAvailableBlock": 0,
+					"getVoteAccounts": map[string]any{
+						"current":    []any{},
+						"delinquent": []any{},
+					},
+				},
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+			)
+
+			mock := api.NewMockClient()
+			mock.SetMinRequiredVersion(tt.requiredVer)
+
+			collector := NewSolanaCollector(client, mock.Client, &ExporterConfig{})
+			collector.isFiredancer = tt.isFiredancer
+
+			if err := testutil.CollectAndCompare(collector, strings.NewReader(tt.expectedOutput), "solana_node_outdated"); err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
