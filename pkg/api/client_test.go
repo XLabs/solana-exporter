@@ -103,7 +103,7 @@ func TestClient_GetMinRequiredVersion(t *testing.T) {
 			}
 
 			// Test GetMinRequiredVersion
-			got, gotEpoch, err := client.GetMinRequiredVersion(context.Background(), tt.cluster)
+			got, gotCluster, gotEpoch, gotFiredancerVersion, err := client.GetMinRequiredVersion(context.Background(), tt.cluster)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErrMsg)
@@ -112,13 +112,17 @@ func TestClient_GetMinRequiredVersion(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.cluster, gotCluster)
 			assert.Equal(t, tt.wantEpoch, gotEpoch)
+			assert.NotEmpty(t, gotFiredancerVersion)
 
 			// Test caching
-			cachedVersion, cachedEpoch, err := client.GetMinRequiredVersion(context.Background(), tt.cluster)
+			cachedVersion, cachedCluster, cachedEpoch, cachedFiredancerVersion, err := client.GetMinRequiredVersion(context.Background(), tt.cluster)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, cachedVersion)
+			assert.Equal(t, tt.cluster, cachedCluster)
 			assert.Equal(t, tt.wantEpoch, cachedEpoch)
+			assert.NotEmpty(t, cachedFiredancerVersion)
 		})
 	}
 }
