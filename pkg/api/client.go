@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/asymmetric-research/solana-exporter/pkg/rpc"
 )
 
 const (
@@ -20,6 +22,7 @@ const (
 type Client struct {
 	HttpClient http.Client
 	baseURL    string
+	rpcClient  *rpc.Client
 	cache      struct {
 		agaveVersion      string
 		firedancerVersion string
@@ -31,11 +34,12 @@ type Client struct {
 	cacheTimeout time.Duration
 }
 
-func NewClient() *Client {
+func NewClient(rpcClient *rpc.Client) *Client {
 	return &Client{
 		HttpClient:   http.Client{},
 		cacheTimeout: CacheTimeout,
 		baseURL:      SolanaEpochStatsAPI,
+		rpcClient:    rpcClient,
 	}
 }
 
@@ -75,14 +79,41 @@ func (c *Client) GetMinRequiredVersion(ctx context.Context, cluster string) (str
 		return "", cluster, 0, "", fmt.Errorf("no data found in response")
 	}
 
-	// Get the first element's agave_min_version and epoch
-	agaveMinVersion := stats.Data[0].AgaveMinVersion
+	// Get the current epoch from the node
+	epochInfo, err := c.rpcClient.GetEpochInfo(ctx, rpc.CommitmentFinalized)
+	if err != nil {
+		return "", cluster, 0, "", fmt.Errorf("failed to get current epoch: %w", err)
+	}
+
+	// Find the entry that matches the current epoch
+	var matchingEntry *struct {
+		Cluster                string  `json:"cluster"`
+		Epoch                  int     `json:"epoch"`
+		AgaveMinVersion        string  `json:"agave_min_version"`
+		AgaveMaxVersion        *string `json:"agave_max_version"`
+		FiredancerMaxVersion   *string `json:"firedancer_max_version"`
+		FiredancerMinVersion   string  `json:"firedancer_min_version"`
+		InheritedFromPrevEpoch bool    `json:"inherited_from_prev_epoch"`
+	}
+	for i := range stats.Data {
+		if stats.Data[i].Epoch == int(epochInfo.Epoch) {
+			matchingEntry = &stats.Data[i]
+			break
+		}
+	}
+
+	// If no matching entry found, use the first entry as fallback
+	if matchingEntry == nil {
+		matchingEntry = &stats.Data[0]
+	}
+
+	agaveMinVersion := matchingEntry.AgaveMinVersion
 	if agaveMinVersion == "" {
 		return "", cluster, 0, "", fmt.Errorf("agave_min_version not found in response")
 	}
 
-	firedancerMinVersion := stats.Data[0].FiredancerMinVersion
-	epoch := stats.Data[0].Epoch
+	firedancerMinVersion := matchingEntry.FiredancerMinVersion
+	epoch := matchingEntry.Epoch
 
 	// Update cache
 	c.mu.Lock()

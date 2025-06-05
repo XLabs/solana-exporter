@@ -67,10 +67,10 @@ type SolanaCollector struct {
 	isFiredancer bool
 }
 
-func NewSolanaCollector(rpcClient *rpc.Client, apiClient *api.Client, config *ExporterConfig) *SolanaCollector {
+func NewSolanaCollector(rpcClient *rpc.Client, config *ExporterConfig) *SolanaCollector {
 	collector := &SolanaCollector{
 		rpcClient: rpcClient,
-		apiClient: apiClient,
+		apiClient: api.NewClient(rpcClient),
 		logger:    slog.Get(),
 		config:    config,
 		ValidatorActiveStake: NewGaugeDesc(

@@ -7,21 +7,57 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asymmetric-research/solana-exporter/pkg/rpc"
+	"github.com/asymmetric-research/solana-exporter/pkg/slog"
 	"github.com/stretchr/testify/assert"
 )
 
+func init() {
+	slog.Init()
+}
+
 func TestClient_GetMinRequiredVersion(t *testing.T) {
 	tests := []struct {
-		name       string
-		cluster    string
-		mockJSON   string
-		wantErr    bool
-		wantErrMsg string
-		want       string
-		wantEpoch  int
+		name         string
+		cluster      string
+		mockJSON     string
+		currentEpoch int
+		wantErr      bool
+		wantErrMsg   string
+		want         string
+		wantEpoch    int
 	}{
 		{
-			name:    "valid mainnet response",
+			name:    "valid mainnet response with matching epoch",
+			cluster: "mainnet-beta",
+			mockJSON: `{
+				"data": [
+					{
+						"cluster": "mainnet-beta",
+						"epoch": 796,
+						"agave_min_version": "2.2.14",
+						"agave_max_version": null,
+						"firedancer_max_version": null,
+						"firedancer_min_version": "0.503.20214",
+						"inherited_from_prev_epoch": true
+					},
+					{
+						"cluster": "mainnet-beta",
+						"epoch": 797,
+						"agave_min_version": "2.2.15",
+						"agave_max_version": null,
+						"firedancer_max_version": null,
+						"firedancer_min_version": "0.503.20215",
+						"inherited_from_prev_epoch": false
+					}
+				]
+			}`,
+			currentEpoch: 797,
+			want:         "2.2.15",
+			wantEpoch:    797,
+		},
+		{
+			name:    "valid mainnet response with fallback to first entry",
 			cluster: "mainnet-beta",
 			mockJSON: `{
 				"data": [
@@ -36,8 +72,9 @@ func TestClient_GetMinRequiredVersion(t *testing.T) {
 					}
 				]
 			}`,
-			want:      "2.2.14",
-			wantEpoch: 796,
+			currentEpoch: 797,
+			want:         "2.2.14",
+			wantEpoch:    796,
 		},
 		{
 			name:    "valid testnet response",
@@ -55,29 +92,33 @@ func TestClient_GetMinRequiredVersion(t *testing.T) {
 					}
 				]
 			}`,
-			want:      "2.1.6",
-			wantEpoch: 797,
+			currentEpoch: 797,
+			want:         "2.1.6",
+			wantEpoch:    797,
 		},
 		{
-			name:       "invalid json response",
-			cluster:    "mainnet-beta",
-			mockJSON:   `{"invalid": "json"`,
-			wantErr:    true,
-			wantErrMsg: "failed to decode response",
+			name:         "invalid json response",
+			cluster:      "mainnet-beta",
+			mockJSON:     `{"invalid": "json"`,
+			currentEpoch: 797,
+			wantErr:      true,
+			wantErrMsg:   "failed to decode response",
 		},
 		{
-			name:       "empty data array",
-			cluster:    "mainnet-beta",
-			mockJSON:   `{"data": []}`,
-			wantErr:    true,
-			wantErrMsg: "no data found in response",
+			name:         "empty data array",
+			cluster:      "mainnet-beta",
+			mockJSON:     `{"data": []}`,
+			currentEpoch: 797,
+			wantErr:      true,
+			wantErrMsg:   "no data found in response",
 		},
 		{
-			name:       "missing agave_min_version",
-			cluster:    "mainnet-beta",
-			mockJSON:   `{"data": [{"cluster": "mainnet-beta", "epoch": 796}]}`,
-			wantErr:    true,
-			wantErrMsg: "agave_min_version not found in response",
+			name:         "missing agave_min_version",
+			cluster:      "mainnet-beta",
+			mockJSON:     `{"data": [{"cluster": "mainnet-beta", "epoch": 796}]}`,
+			currentEpoch: 797,
+			wantErr:      true,
+			wantErrMsg:   "agave_min_version not found in response",
 		},
 	}
 
@@ -95,12 +136,25 @@ func TestClient_GetMinRequiredVersion(t *testing.T) {
 			}))
 			defer server.Close()
 
+			// Create mock RPC client
+			mockServer, mockRPCClient := rpc.NewMockClient(t,
+				map[string]any{
+					"getEpochInfo": map[string]int{
+						"epoch": tt.currentEpoch,
+					},
+				},
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+			)
+			defer mockServer.Close()
+
 			// Create client with test server URL
-			client := &Client{
-				HttpClient:   http.Client{},
-				baseURL:      server.URL + "/api/epoch/required_versions",
-				cacheTimeout: time.Hour,
-			}
+			client := NewClient(mockRPCClient)
+			client.baseURL = server.URL + "/api/epoch/required_versions"
+			client.cacheTimeout = time.Hour
 
 			// Test GetMinRequiredVersion
 			got, gotCluster, gotEpoch, gotFiredancerVersion, err := client.GetMinRequiredVersion(context.Background(), tt.cluster)

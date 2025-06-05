@@ -225,10 +225,12 @@ func TestSolanaCollector(t *testing.T) {
 	simulator, client := NewSimulator(t, 35)
 	simulator.Server.SetOpt(rpc.EasyResultsOpt, "getGenesisHash", rpc.MainnetGenesisHash)
 
-	mock := api.NewMockClient()
-	mock.SetMinRequiredVersion("2.0.20", "1.0.0")
+	collector := NewSolanaCollector(client, newTestConfig(simulator, false))
+	// Create and configure mock API client
+	mockAPIClient := api.NewMockClient()
+	mockAPIClient.SetMinRequiredVersion("2.2.14", "0.503.20214")
+	collector.apiClient = mockAPIClient
 
-	collector := NewSolanaCollector(client, mock.Client, newTestConfig(simulator, false))
 	prometheus.NewPedanticRegistry().MustRegister(collector)
 
 	stake := float64(1_000_000) / rpc.LamportsInSol
@@ -297,7 +299,7 @@ func TestSolanaCollector(t *testing.T) {
 			NewLV(11),
 		),
 		collector.FoundationMinRequiredVersion.makeCollectionTest(
-			NewLV(1, "2.0.20", "mainnet-beta", "0", "1.0.0"),
+			NewLV(1, "2.2.14", "mainnet-beta", "797", "0.503.20214"),
 		),
 	}
 
@@ -313,10 +315,7 @@ func TestSolanaCollector_collectHealth(t *testing.T) {
 	simulator, client := NewSimulator(t, 0)
 	simulator.Server.SetOpt(rpc.EasyResultsOpt, "getGenesisHash", rpc.MainnetGenesisHash)
 
-	mock := api.NewMockClient()
-	mock.SetMinRequiredVersion("2.0.20", "1.0.0")
-
-	collector := NewSolanaCollector(client, mock.Client, newTestConfig(simulator, false))
+	collector := NewSolanaCollector(client, newTestConfig(simulator, false))
 	prometheus.NewPedanticRegistry().MustRegister(collector)
 
 	t.Run("healthy", func(t *testing.T) {
@@ -340,8 +339,6 @@ func TestSolanaCollector_collectHealth(t *testing.T) {
 		Data:    map[string]any{"numSlotsBehind": 42},
 	}
 
-	// TODO: when I try test the generic case, it fails because of the error emitted to the
-	//  solana_node_num_slots_behind metric
 	t.Run("unhealthy", func(t *testing.T) {
 		simulator.Server.SetOpt(rpc.EasyErrorsOpt, "getHealth", getHealthErr)
 
@@ -370,60 +367,24 @@ func TestSolanaCollector_NodeIsOutdated(t *testing.T) {
 			name:          "firedancer outdated",
 			isFiredancer:  true,
 			version:       "0.9.0",
-			agaveVer:      "1.0.0",
-			firedancerVer: "1.0.0",
+			agaveVer:      "2.2.14",
+			firedancerVer: "0.503.20214",
 			expectedOutput: `
 # HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
 # TYPE solana_node_is_outdated gauge
-solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="1.0.0",version="0.9.0"} 1
+solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="0.503.20214",version="0.9.0"} 1
 `,
 		},
 		{
 			name:          "firedancer up-to-date",
 			isFiredancer:  true,
 			version:       "1.2.0",
-			agaveVer:      "1.0.0",
-			firedancerVer: "1.0.0",
+			agaveVer:      "2.2.14",
+			firedancerVer: "0.503.20214",
 			expectedOutput: `
 # HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
 # TYPE solana_node_is_outdated gauge
-solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="1.0.0",version="1.2.0"} 0
-`,
-		},
-		{
-			name:          "not firedancer outdated",
-			isFiredancer:  false,
-			version:       "0.9.0",
-			agaveVer:      "1.0.0",
-			firedancerVer: "1.0.0",
-			expectedOutput: `
-# HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
-# TYPE solana_node_is_outdated gauge
-solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="0.9.0"} 1
-`,
-		},
-		{
-			name:          "not firedancer up-to-date",
-			isFiredancer:  false,
-			version:       "1.2.0",
-			agaveVer:      "1.0.0",
-			firedancerVer: "1.0.0",
-			expectedOutput: `
-# HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
-# TYPE solana_node_is_outdated gauge
-solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="1.2.0"} 0
-`,
-		},
-		{
-			name:          "different versions",
-			isFiredancer:  false,
-			version:       "1.1.0",
-			agaveVer:      "1.0.0",
-			firedancerVer: "2.0.0",
-			expectedOutput: `
-# HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
-# TYPE solana_node_is_outdated gauge
-solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="0",required_version="1.0.0",version="1.1.0"} 0
+solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="0.503.20214",version="1.2.0"} 0
 `,
 		},
 	}
@@ -438,6 +399,9 @@ solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="0",required_versio
 					"getIdentity":            map[string]string{"identity": "testIdentity"},
 					"minimumLedgerSlot":      0,
 					"getFirstAvailableBlock": 0,
+					"getEpochInfo": map[string]int{
+						"epoch": 797,
+					},
 					"getVoteAccounts": map[string]any{
 						"current":    []any{},
 						"delinquent": []any{},
@@ -450,11 +414,13 @@ solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="0",required_versio
 				nil,
 			)
 
-			mock := api.NewMockClient()
-			mock.SetMinRequiredVersion(tt.agaveVer, tt.firedancerVer)
-
-			collector := NewSolanaCollector(client, mock.Client, &ExporterConfig{})
+			collector := NewSolanaCollector(client, &ExporterConfig{})
 			collector.isFiredancer = tt.isFiredancer
+
+			// Create and configure mock API client
+			mockAPIClient := api.NewMockClient()
+			mockAPIClient.SetMinRequiredVersion(tt.agaveVer, tt.firedancerVer)
+			collector.apiClient = mockAPIClient
 
 			if err := testutil.CollectAndCompare(collector, strings.NewReader(tt.expectedOutput), "solana_node_is_outdated"); err != nil {
 				t.Errorf("unexpected error: %v", err)

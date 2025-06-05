@@ -10,20 +10,19 @@ type MockClient struct {
 	*Client
 }
 
-func NewMockClient() *MockClient {
+func NewMockClient() *Client {
 	mock := &Client{
 		HttpClient:   http.Client{},
 		baseURL:      SolanaEpochStatsAPI,
 		cacheTimeout: CacheTimeout,
 	}
-	return &MockClient{
-		Client: mock,
-	}
+	return mock
 }
 
-func (m *MockClient) SetMinRequiredVersion(agaveVersion, firedancerVersion string) {
+func (m *Client) SetMinRequiredVersion(agaveVersion, firedancerVersion string) {
 	m.cache.agaveVersion = agaveVersion
 	m.cache.firedancerVersion = firedancerVersion
+	m.cache.epoch = 797 // Set a specific epoch value
 	m.cache.lastCheck = time.Now()
 }
 
