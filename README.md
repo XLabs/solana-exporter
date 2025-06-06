@@ -148,6 +148,7 @@ The tables below describes all the metrics collected by the `solana-exporter`:
 | `solana_node_block_height`                     | The current block height of the node.                                                                                 | N/A                           |
 | `solana_node_is_active`                        | Whether the node is active and participating in consensus.                                                            | `identity`                    |
 | `solana_node_is_outdated`                      | Whether the node is running a version below the required minimum for Firedancer and Agave clients.                                      | `is_firedancer`, `version`, `required_version`, `cluster` |
+| `solana_node_needs_update`                     | Whether the node needs to be updated before the next epoch to remain compliant.                                                         | `is_firedancer`, `version`, `required_version`, `cluster`, `epoch` |
 | `solana_foundation_min_required_version` | Minimum required Solana version for the [solana foundation delegation program](https://solana.org/delegation-program) | `agave_min_version`, `firedancer_min_version`, `cluster`, `epoch` |
 
 #### Vote Account Metrics

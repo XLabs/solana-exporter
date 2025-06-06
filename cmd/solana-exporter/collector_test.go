@@ -372,7 +372,7 @@ func TestSolanaCollector_NodeIsOutdated(t *testing.T) {
 			expectedOutput: `
 # HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
 # TYPE solana_node_is_outdated gauge
-solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="0.503.20214",version="0.9.0"} 1
+solana_node_is_outdated{cluster="mainnet-beta",epoch="797",is_firedancer="1",required_version="0.503.20214",version="0.9.0"} 1
 `,
 		},
 		{
@@ -384,7 +384,7 @@ solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_versio
 			expectedOutput: `
 # HELP solana_node_is_outdated Whether the node is running a version below the required minimum for Firedancer
 # TYPE solana_node_is_outdated gauge
-solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_version="0.503.20214",version="1.2.0"} 0
+solana_node_is_outdated{cluster="mainnet-beta",epoch="797",is_firedancer="1",required_version="0.503.20214",version="1.2.0"} 0
 `,
 		},
 	}
@@ -423,6 +423,116 @@ solana_node_is_outdated{cluster="mainnet-beta",is_firedancer="1",required_versio
 			collector.apiClient = mockAPIClient
 
 			if err := testutil.CollectAndCompare(collector, strings.NewReader(tt.expectedOutput), "solana_node_is_outdated"); err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestSolanaCollector_NodeNeedsUpdate(t *testing.T) {
+	tests := []struct {
+		name              string
+		isFiredancer      bool
+		version           string
+		agaveVer          string
+		firedancerVer     string
+		nextAgaveVer      string
+		nextFiredancerVer string
+		expectedOutput    string
+	}{
+		{
+			name:              "firedancer needs update",
+			isFiredancer:      true,
+			version:           "0.503.20214",
+			agaveVer:          "2.2.14",
+			firedancerVer:     "0.503.20214",
+			nextAgaveVer:      "2.2.15",
+			nextFiredancerVer: "0.503.20215",
+			expectedOutput: `
+# HELP solana_node_needs_update Whether the node needs to be updated before the next epoch to remain compliant
+# TYPE solana_node_needs_update gauge
+solana_node_needs_update{cluster="mainnet-beta",epoch="798",is_firedancer="1",required_version="0.503.20215",version="0.503.20214"} 1
+`,
+		},
+		{
+			name:              "firedancer up-to-date for next epoch",
+			isFiredancer:      true,
+			version:           "0.503.20215",
+			agaveVer:          "2.2.14",
+			firedancerVer:     "0.503.20214",
+			nextAgaveVer:      "2.2.15",
+			nextFiredancerVer: "0.503.20215",
+			expectedOutput: `
+# HELP solana_node_needs_update Whether the node needs to be updated before the next epoch to remain compliant
+# TYPE solana_node_needs_update gauge
+solana_node_needs_update{cluster="mainnet-beta",epoch="798",is_firedancer="1",required_version="0.503.20215",version="0.503.20215"} 0
+`,
+		},
+		{
+			name:              "agave needs update",
+			isFiredancer:      false,
+			version:           "2.2.14",
+			agaveVer:          "2.2.14",
+			firedancerVer:     "0.503.20214",
+			nextAgaveVer:      "2.2.15",
+			nextFiredancerVer: "0.503.20215",
+			expectedOutput: `
+# HELP solana_node_needs_update Whether the node needs to be updated before the next epoch to remain compliant
+# TYPE solana_node_needs_update gauge
+solana_node_needs_update{cluster="mainnet-beta",epoch="798",is_firedancer="0",required_version="2.2.15",version="2.2.14"} 1
+`,
+		},
+		{
+			name:              "agave up-to-date for next epoch",
+			isFiredancer:      false,
+			version:           "2.2.15",
+			agaveVer:          "2.2.14",
+			firedancerVer:     "0.503.20214",
+			nextAgaveVer:      "2.2.15",
+			nextFiredancerVer: "0.503.20215",
+			expectedOutput: `
+# HELP solana_node_needs_update Whether the node needs to be updated before the next epoch to remain compliant
+# TYPE solana_node_needs_update gauge
+solana_node_needs_update{cluster="mainnet-beta",epoch="798",is_firedancer="0",required_version="2.2.15",version="2.2.15"} 0
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, client := rpc.NewMockClient(t,
+				map[string]any{
+					"getVersion":             map[string]string{"solana-core": tt.version},
+					"getGenesisHash":         rpc.MainnetGenesisHash,
+					"getHealth":              "ok",
+					"getIdentity":            map[string]string{"identity": "testIdentity"},
+					"minimumLedgerSlot":      0,
+					"getFirstAvailableBlock": 0,
+					"getEpochInfo": map[string]int{
+						"epoch": 797,
+					},
+					"getVoteAccounts": map[string]any{
+						"current":    []any{},
+						"delinquent": []any{},
+					},
+				},
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+			)
+
+			collector := NewSolanaCollector(client, &ExporterConfig{})
+			collector.isFiredancer = tt.isFiredancer
+
+			// Create and configure mock API client
+			mockAPIClient := api.NewMockClient()
+			mockAPIClient.SetMinRequiredVersion(tt.agaveVer, tt.firedancerVer)
+			mockAPIClient.SetNextEpochMinRequiredVersion(tt.nextAgaveVer, tt.nextFiredancerVer)
+			collector.apiClient = mockAPIClient
+
+			if err := testutil.CollectAndCompare(collector, strings.NewReader(tt.expectedOutput), "solana_node_needs_update"); err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
