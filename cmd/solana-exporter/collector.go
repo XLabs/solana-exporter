@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
+	"github.com/asymmetric-research/solana-exporter/pkg/api"
 	"github.com/asymmetric-research/solana-exporter/pkg/rpc"
 	"github.com/asymmetric-research/solana-exporter/pkg/slog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,6 +24,8 @@ const (
 	AddressLabel         = "address"
 	EpochLabel           = "epoch"
 	TransactionTypeLabel = "transaction_type"
+	IsFiredancerLabel    = "is_firedancer"
+	ClusterLabel         = "cluster"
 
 	StatusSkipped = "skipped"
 	StatusValid   = "valid"
@@ -34,32 +39,39 @@ const (
 
 type SolanaCollector struct {
 	rpcClient *rpc.Client
+	apiClient *api.Client
 	logger    *zap.SugaredLogger
 
 	config *ExporterConfig
 
 	/// descriptors:
-	ValidatorActiveStake    *GaugeDesc
-	ClusterActiveStake      *GaugeDesc
-	ValidatorLastVote       *GaugeDesc
-	ClusterLastVote         *GaugeDesc
-	ValidatorRootSlot       *GaugeDesc
-	ClusterRootSlot         *GaugeDesc
-	ValidatorDelinquent     *GaugeDesc
-	ClusterValidatorCount   *GaugeDesc
-	AccountBalances         *GaugeDesc
-	NodeVersion             *GaugeDesc
-	NodeIsHealthy           *GaugeDesc
-	NodeNumSlotsBehind      *GaugeDesc
-	NodeMinimumLedgerSlot   *GaugeDesc
-	NodeFirstAvailableBlock *GaugeDesc
-	NodeIdentity            *GaugeDesc
-	NodeIsActive            *GaugeDesc
+	ValidatorActiveStake         *GaugeDesc
+	ClusterActiveStake           *GaugeDesc
+	ValidatorLastVote            *GaugeDesc
+	ClusterLastVote              *GaugeDesc
+	ValidatorRootSlot            *GaugeDesc
+	ClusterRootSlot              *GaugeDesc
+	ValidatorDelinquent          *GaugeDesc
+	ClusterValidatorCount        *GaugeDesc
+	AccountBalances              *GaugeDesc
+	NodeVersion                  *GaugeDesc
+	NodeIsHealthy                *GaugeDesc
+	NodeNumSlotsBehind           *GaugeDesc
+	NodeMinimumLedgerSlot        *GaugeDesc
+	NodeFirstAvailableBlock      *GaugeDesc
+	NodeIdentity                 *GaugeDesc
+	NodeIsActive                 *GaugeDesc
+	FoundationMinRequiredVersion *GaugeDesc
+	NodeIsOutdated               *GaugeDesc
+	NodeNeedsUpdate              *GaugeDesc
+
+	isFiredancer bool
 }
 
 func NewSolanaCollector(rpcClient *rpc.Client, config *ExporterConfig) *SolanaCollector {
 	collector := &SolanaCollector{
 		rpcClient: rpcClient,
+		apiClient: api.NewClient(rpcClient),
 		logger:    slog.Get(),
 		config:    config,
 		ValidatorActiveStake: NewGaugeDesc(
@@ -110,7 +122,7 @@ func NewSolanaCollector(rpcClient *rpc.Client, config *ExporterConfig) *SolanaCo
 		NodeVersion: NewGaugeDesc(
 			"solana_node_version",
 			"Node version of solana",
-			VersionLabel,
+			VersionLabel, IsFiredancerLabel,
 		),
 		NodeIdentity: NewGaugeDesc(
 			"solana_node_identity",
@@ -138,6 +150,21 @@ func NewSolanaCollector(rpcClient *rpc.Client, config *ExporterConfig) *SolanaCo
 			fmt.Sprintf("Whether the node is active and participating in consensus (using %s pubkey)", IdentityLabel),
 			IdentityLabel,
 		),
+		FoundationMinRequiredVersion: NewGaugeDesc(
+			"solana_foundation_min_required_version",
+			"Minimum required Solana version for the solana foundation delegation program",
+			"agave_min_version", "firedancer_min_version", ClusterLabel, EpochLabel,
+		),
+		NodeIsOutdated: NewGaugeDesc(
+			"solana_node_is_outdated",
+			"Whether the node is running a version below the required minimum for Firedancer",
+			IsFiredancerLabel, VersionLabel, "required_version", ClusterLabel, EpochLabel,
+		),
+		NodeNeedsUpdate: NewGaugeDesc(
+			"solana_node_needs_update",
+			"Whether the node needs to be updated before the next epoch to remain compliant",
+			IsFiredancerLabel, VersionLabel, "required_version", ClusterLabel, EpochLabel,
+		),
 	}
 	return collector
 }
@@ -159,6 +186,9 @@ func (c *SolanaCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.NodeMinimumLedgerSlot.Desc
 	ch <- c.NodeFirstAvailableBlock.Desc
 	ch <- c.NodeIsActive.Desc
+	ch <- c.FoundationMinRequiredVersion.Desc
+	ch <- c.NodeIsOutdated.Desc
+	ch <- c.NodeNeedsUpdate.Desc
 }
 
 func (c *SolanaCollector) collectVoteAccounts(ctx context.Context, ch chan<- prometheus.Metric) {
@@ -235,7 +265,13 @@ func (c *SolanaCollector) collectVersion(ctx context.Context, ch chan<- promethe
 		return
 	}
 
-	ch <- c.NodeVersion.MustNewConstMetric(1, version)
+	// Use the isFiredancer field that was set in Collect
+	isFiredancer := "0"
+	if c.isFiredancer {
+		isFiredancer = "1"
+	}
+
+	ch <- c.NodeVersion.MustNewConstMetric(1, version, isFiredancer)
 	c.logger.Info("Version collected.")
 }
 
@@ -331,6 +367,155 @@ func (c *SolanaCollector) collectHealth(ctx context.Context, ch chan<- prometheu
 	return
 }
 
+func compareVersions(a, b string) int {
+	// Compare dot-separated version strings, e.g., "0.503.20214"
+	aParts := strings.Split(a, ".")
+	bParts := strings.Split(b, ".")
+	maxLen := len(aParts)
+	if len(bParts) > maxLen {
+		maxLen = len(bParts)
+	}
+	for i := 0; i < maxLen; i++ {
+		var aVal, bVal int
+		if i < len(aParts) {
+			aVal, _ = strconv.Atoi(aParts[i])
+		}
+		if i < len(bParts) {
+			bVal, _ = strconv.Atoi(bParts[i])
+		}
+		if aVal < bVal {
+			return -1
+		} else if aVal > bVal {
+			return 1
+		}
+	}
+	return 0
+}
+
+func (c *SolanaCollector) collectNodeIsOutdated(ch chan<- prometheus.Metric) {
+	version, err := c.rpcClient.GetVersion(context.Background())
+	if err != nil {
+		c.logger.Errorw("failed to get version", "error", err)
+		return
+	}
+
+	cluster := "mainnet-beta" // Default to mainnet-beta
+	genesisHash, err := c.rpcClient.GetGenesisHash(context.Background())
+	if err == nil {
+		cluster, err = rpc.GetClusterFromGenesisHash(genesisHash)
+		if err != nil {
+			c.logger.Errorw("failed to get cluster from genesis hash", "error", err)
+		}
+	}
+
+	agaveMinVersion, _, epoch, firedancerMinVersion, err := c.apiClient.GetMinRequiredVersion(context.Background(), cluster)
+	if err != nil {
+		c.logger.Errorw("failed to get required version", "error", err)
+		return
+	}
+
+	// Choose the appropriate minimum version based on whether the node is running Firedancer
+	requiredVersion := agaveMinVersion
+	if c.isFiredancer {
+		requiredVersion = firedancerMinVersion
+	}
+
+	// Compare versions and determine if the node is outdated
+	isOutdated := compareVersions(version, requiredVersion) < 0
+	c.logger.Infow("node version check",
+		"current_version", version,
+		"required_version", requiredVersion,
+		"is_outdated", isOutdated,
+		"cluster", cluster,
+		"is_firedancer", c.isFiredancer,
+		"agave_min_version", agaveMinVersion,
+		"firedancer_min_version", firedancerMinVersion,
+		"epoch", epoch,
+	)
+
+	isFiredancerStr := "0"
+	if c.isFiredancer {
+		isFiredancerStr = "1"
+	}
+
+	ch <- c.NodeIsOutdated.MustNewConstMetric(
+		BoolToFloat64(isOutdated),
+		isFiredancerStr,
+		version,
+		requiredVersion,
+		cluster,
+		fmt.Sprintf("%d", epoch),
+	)
+}
+
+func (c *SolanaCollector) collectNodeNeedsUpdate(ch chan<- prometheus.Metric) {
+	version, err := c.rpcClient.GetVersion(context.Background())
+	if err != nil {
+		c.logger.Errorw("failed to get version", "error", err)
+		return
+	}
+	c.logger.Infow("current node version", "version", version)
+
+	cluster := "mainnet-beta" // Default to mainnet-beta
+	genesisHash, err := c.rpcClient.GetGenesisHash(context.Background())
+	if err == nil {
+		cluster, err = rpc.GetClusterFromGenesisHash(genesisHash)
+		if err != nil {
+			c.logger.Errorw("failed to get cluster from genesis hash", "error", err)
+		}
+	}
+	c.logger.Infow("detected cluster", "cluster", cluster)
+
+	// Get next epoch version requirements
+	nextAgaveMinVersion, _, nextEpoch, nextFiredancerMinVersion, err := c.apiClient.GetNextEpochMinRequiredVersion(context.Background(), cluster)
+	if err != nil {
+		c.logger.Errorw("failed to get next epoch required version", "error", err)
+		return
+	}
+	c.logger.Infow("next epoch version requirements",
+		"next_agave_min_version", nextAgaveMinVersion,
+		"next_firedancer_min_version", nextFiredancerMinVersion,
+		"next_epoch", nextEpoch,
+	)
+
+	// Choose the appropriate minimum version based on whether the node is running Firedancer
+	nextRequiredVersion := nextAgaveMinVersion
+	if c.isFiredancer {
+		nextRequiredVersion = nextFiredancerMinVersion
+	}
+	c.logger.Infow("selected required version",
+		"is_firedancer", c.isFiredancer,
+		"next_required_version", nextRequiredVersion,
+	)
+
+	// Compare versions and determine if the node needs an update for the next epoch
+	needsUpdate := compareVersions(version, nextRequiredVersion) < 0
+	c.logger.Infow("node next epoch version check",
+		"current_version", version,
+		"next_epoch_required_version", nextRequiredVersion,
+		"needs_update", needsUpdate,
+		"cluster", cluster,
+		"is_firedancer", c.isFiredancer,
+		"next_epoch", nextEpoch,
+		"next_agave_min_version", nextAgaveMinVersion,
+		"next_firedancer_min_version", nextFiredancerMinVersion,
+	)
+
+	isFiredancerStr := "0"
+	if c.isFiredancer {
+		isFiredancerStr = "1"
+	}
+
+	ch <- c.NodeNeedsUpdate.MustNewConstMetric(
+		BoolToFloat64(needsUpdate),
+		isFiredancerStr,
+		version,
+		nextRequiredVersion,
+		cluster,
+		fmt.Sprintf("%d", nextEpoch),
+	)
+}
+
 func (c *SolanaCollector) Collect(ch chan<- prometheus.Metric) {
 	c.logger.Info("========== BEGIN COLLECTION ==========")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -340,9 +525,53 @@ func (c *SolanaCollector) Collect(ch chan<- prometheus.Metric) {
 	c.collectMinimumLedgerSlot(ctx, ch)
 	c.collectFirstAvailableBlock(ctx, ch)
 	c.collectVoteAccounts(ctx, ch)
-	c.collectVersion(ctx, ch)
+
+	// Collect version and firedancer status
+	c.logger.Info("Collecting version...")
+	version, err := c.rpcClient.GetVersion(ctx)
+	isFiredancer := "0"
+	if err == nil {
+		resp, ferr := c.rpcClient.GetFiredancerMetrics(ctx)
+		if ferr == nil && resp.StatusCode == 200 {
+			isFiredancer = "1"
+			c.isFiredancer = true
+		}
+	}
+	if err != nil {
+		c.logger.Errorf("failed to get version: %v", err)
+		ch <- c.NodeVersion.NewInvalidMetric(err)
+	} else {
+		ch <- c.NodeVersion.MustNewConstMetric(1, version, isFiredancer)
+	}
+	c.logger.Info("Version collected.")
+
 	c.collectIdentity(ctx, ch)
 	c.collectBalances(ctx, ch)
+
+	// Collect foundation min required version
+	c.logger.Info("Collecting minimum required version...")
+	genesisHash, err := c.rpcClient.GetGenesisHash(ctx)
+	cluster := ""
+	if err == nil {
+		cluster, err = rpc.GetClusterFromGenesisHash(genesisHash)
+	}
+	agaveMinVersion, minVerCluster, epoch, firedancerMinVersion, minVerErr := "", "", 0, "", err
+	if err == nil {
+		agaveMinVersion, minVerCluster, epoch, firedancerMinVersion, minVerErr = c.apiClient.GetMinRequiredVersion(ctx, cluster)
+	}
+	if minVerErr != nil {
+		c.logger.Errorf("failed to get min required version: %v", minVerErr)
+		ch <- c.FoundationMinRequiredVersion.NewInvalidMetric(minVerErr)
+	} else {
+		ch <- c.FoundationMinRequiredVersion.MustNewConstMetric(1, agaveMinVersion, firedancerMinVersion, minVerCluster, fmt.Sprintf("%d", epoch))
+	}
+	c.logger.Info("Minimum required version collected.")
+
+	// Collect NodeIsOutdated metric
+	c.collectNodeIsOutdated(ch)
+
+	// Collect NodeNeedsUpdate metric
+	c.collectNodeNeedsUpdate(ch)
 
 	c.logger.Info("=========== END COLLECTION ===========")
 }

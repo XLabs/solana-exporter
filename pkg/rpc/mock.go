@@ -334,6 +334,6 @@ func NewMockClient(
 		}
 	})
 
-	client := NewRPCClient(server.URL(), time.Second)
+	client := NewRPCClient(server.URL(), time.Second, 7999)
 	return server, client
 }

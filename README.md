@@ -100,7 +100,8 @@ The exporter is configured via the following command line arguments:
 | `-rpc-url`                             | Solana RPC URL (including protocol and path), e.g., `"http://localhost:8899"` or `"https://api.mainnet-beta.solana.com"`                                                                                                | `"http://localhost:8899"` |
 | `-slot-pace`                           | This is the time (in seconds) between slot-watching metric collections                                                                                                                                                  | `1`                       |
 | `-active-identity`                     | Validator identity public key used to determine if the node is considered active in the `solana_node_is_active` metric.                                                                                                 | N/A                       |
-| `-epoch-cleanup-time`                  | The time to wait before cleaning old epoch metrics from the prometheus endpoint.                                                                                                                                        |                           |
+| `-epoch-cleanup-time`                  | The time to wait before cleaning old epoch metrics from the prometheus endpoint.                                                                                                                                        | `60`                      |
+| `-firedancer-metrics-port`             | Port number for Firedancer metrics endpoint.                                                                                                                                                                            | `7999`                    |
 
 ### Notes on Configuration
 
@@ -146,6 +147,9 @@ The tables below describes all the metrics collected by the `solana-exporter`:
 | `solana_validator_block_size`                  | Number of transactions per block.                                                                                     | `nodekey`, `transaction_type` |
 | `solana_node_block_height`                     | The current block height of the node.                                                                                 | N/A                           |
 | `solana_node_is_active`                        | Whether the node is active and participating in consensus.                                                            | `identity`                    |
+| `solana_node_is_outdated`                      | Whether the node is running a version below the required minimum for Firedancer and Agave clients.                                      | `is_firedancer`, `version`, `required_version`, `cluster` |
+| `solana_node_needs_update`                     | Whether the node needs to be updated before the next epoch to remain compliant.                                                         | `is_firedancer`, `version`, `required_version`, `cluster`, `epoch` |
+| `solana_foundation_min_required_version` | Minimum required Solana version for the [solana foundation delegation program](https://solana.org/delegation-program) | `agave_min_version`, `firedancer_min_version`, `cluster`, `epoch` |
 
 #### Vote Account Metrics
 
@@ -173,3 +177,6 @@ The table below describes the various metric labels:
 | `status`           | Whether a slot was skipped or valid.          | `valid`, `skipped`                                   |
 | `epoch`            | Solana epoch number.                          | e.g., `663`                                          |
 | `transaction_type` | General transaction type.                     | `vote`, `non_vote`                                   |
+| `cluster`          | Solana cluster.                                | `mainnet-beta`, `devnet`, `testnet`                 |
+| `is_firedancer`    | Whether the node is running Firedancer.        | `0`, `1`                                            |
+| `required_version` | Minimum required version for the node type.    | e.g., `1.0.0`                                       |
